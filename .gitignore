@@ -6,6 +6,20 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/*
+vm_env/*
+*.egg-info/
+
+# Data
+data/
+*.db
+*.wav
+
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
@@ -40,6 +54,7 @@ build/Release
 # Dependency directories
 node_modules/
 jspm_packages/
+frontend/dist/
 
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
