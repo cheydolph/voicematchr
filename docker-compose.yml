@@ -7,9 +7,12 @@ services:
       - KOKORO_BASE_URL=${KOKORO_BASE_URL}
       - DB_PATH=${DB_PATH}
       - RECORDINGS_DIR=${RECORDINGS_DIR}
+      - NUMBA_CACHE_DIR=/tmp/numba_cache
     volumes:
       - ./data:/data
       - ./voicematchr-service/app:/app/app
+      - ./voicematchr-service/tests:/app/tests
+      - ./pytest.ini:/app/pytest.ini:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3939/health"]
       interval: 10s
@@ -23,5 +26,6 @@ services:
     volumes:
       - ./frontend/dist:/usr/share/nginx/html:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ~/.cache/torch:/root/.cache/torch:ro
     depends_on:
       - voicematchr-service
