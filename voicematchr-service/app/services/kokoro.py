@@ -72,6 +72,6 @@ async def list_voices() -> list[dict[str, Any]]:
     to synthesize_wav().
     """
     async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.get(f"{KOKORO_BASE_URL}/v1/voices")
+        response = await client.get(f"{KOKORO_BASE_URL}/v1/audio/voices")
         response.raise_for_status()
         return response.json()
