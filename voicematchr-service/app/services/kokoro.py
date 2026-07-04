@@ -10,7 +10,7 @@ import httpx
 # /mnt/.../models on the host. If that volume is empty on first start,
 # the image downloads the model before serving any synthesis request.
 # SYNTHESIS_TIMEOUT covers that scenario; normal (warm) synthesis completes in ~5s.
-KOKORO_BASE_URL: str = os.environ.get("KOKORO_BASE_URL", "http://localhost:8880")
+KOKORO_BASE_URL: str = os.environ.get("KOKORO_BASE_URL", "http://localhost:8881")
 SYNTHESIS_TIMEOUT: float = 600.0  # 10 minutes; covers cold model-download + synthesis
 
 PROBE_PASSAGE: str = (

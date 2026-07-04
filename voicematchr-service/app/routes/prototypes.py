@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
+from typing import Annotated
 
+import aiofiles
+import aiofiles.os
+import aiofiles.tempfile
 import aiosqlite
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -30,10 +32,20 @@ class PrototypeResponse(BaseModel):
     loudness: float | None
 
 
-@router.post("/", response_model=PrototypeResponse, status_code=201)
+@router.post(
+    "/",
+    response_model=PrototypeResponse,
+    status_code=201,
+    responses={
+        500: {"description": "Analysis pipeline failed for the requested file."},
+        502: {
+            "description": "Kokoro synthesis service failed to generate the requested voice."
+        },
+    },
+)
 async def create_prototype(
     body: PrototypeCreate,
-    db: aiosqlite.Connection = Depends(get_db),
+    db: Annotated[aiosqlite.Connection, Depends(get_db)],
 ):
     """
     Synthesize a prototype voice via Kokoro TTS, run it through the shared
@@ -46,8 +58,10 @@ async def create_prototype(
 
     tmp_path = None
     try:
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            tmp.write(wav_bytes)
+        async with aiofiles.tempfile.NamedTemporaryFile(
+            suffix=".wav", delete=False
+        ) as tmp:
+            await tmp.write(wav_bytes)
             tmp_path = tmp.name
         embedding = embedder.compute_embedding(tmp_path)
         feats = extractor.extract_features(tmp_path)
@@ -55,7 +69,7 @@ async def create_prototype(
         raise HTTPException(status_code=500, detail=f"Analysis pipeline failed: {exc}")
     finally:
         if tmp_path is not None:
-            os.unlink(tmp_path)
+            await aiofiles.os.remove(tmp_path)
 
     cursor = await db.execute(
         """
@@ -86,7 +100,9 @@ async def create_prototype(
 
 
 @router.get("/", response_model=list[PrototypeResponse])
-async def list_prototypes(db: aiosqlite.Connection = Depends(get_db)):
+async def list_prototypes(
+    db: Annotated[aiosqlite.Connection, Depends(get_db)],
+):
     cursor = await db.execute(
         "SELECT id, voice_name, speed, f0_mean, f0_range, hnr, "
         "spectral_tilt, loudness FROM prototypes ORDER BY id"
