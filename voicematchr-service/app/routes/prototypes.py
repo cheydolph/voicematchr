@@ -7,7 +7,7 @@ import aiofiles
 import aiofiles.os
 import aiofiles.tempfile
 import aiosqlite
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
 from app.repository.db import get_db
@@ -121,3 +121,25 @@ async def list_prototypes(
         )
         for row in rows
     ]
+
+
+@router.get(
+    "/{prototype_id}/preview",
+    responses={
+        404: {"description": "Not found."},
+    },
+)
+async def preview_prototype(
+    prototype_id: int,
+    db: Annotated[aiosqlite.Connection, Depends(get_db)],
+):
+    cursor = await db.execute(
+        "SELECT voice_name, speed FROM prototypes WHERE id = ?", (prototype_id,)
+    )
+    row = await cursor.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Prototype not found.")
+    wav_bytes = await kokoro.synthesize_wav(
+        row["voice_name"], row["speed"], text="Hello, this is a preview of my voice."
+    )
+    return Response(content=wav_bytes, media_type="audio/wav")
