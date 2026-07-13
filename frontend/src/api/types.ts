@@ -49,3 +49,22 @@ export interface AnalyzeResponse {
 	delta_vector: AcousticFeatures;
 	features: AcousticFeatures;
 }
+
+/**
+ * One analyzed submission within a session, as returned by GET /sessions/.
+ * `cosine_distance` is nullable in the schema (recordings.cosine_distance is a
+ * nullable REAL column); the progress chart must filter nulls rather than assume.
+ * Mirrors sessions.RecordingSummary.
+ */
+export interface RecordingSummary {
+	recording_id: number;
+	cosine_distance: number | null;
+	created_at: string;
+}
+
+/** Mirrors sessions.SessionSummary. Recordings arrive oldest first. */
+export interface SessionSummary {
+	session_id: number;
+	prototype_id: number;
+	recordings: RecordingSummary[];
+}

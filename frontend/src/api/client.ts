@@ -16,6 +16,7 @@ import type {
 	OnboardResponse,
 	Prototype,
 	SessionCreateResponse,
+	SessionSummary,
 } from "./types";
 
 const API_BASE = import.meta.env.DEV ? "http://localhost:3939" : "/api";
@@ -69,6 +70,16 @@ export function createSession(
 		method: "POST",
 		headers: { "Content-Type": "application/json", ...authHeader(token) },
 		body: JSON.stringify({ prototype_id: prototypeId }),
+	});
+}
+
+/**
+ * Every session belonging to the bearer of `token`, each with its recordings.
+ * The backend derives the user from the token, so no user id is sent.
+ */
+export function fetchSessions(token: string): Promise<SessionSummary[]> {
+	return request<SessionSummary[]>("/sessions/", {
+		headers: authHeader(token),
 	});
 }
 

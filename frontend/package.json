@@ -26,7 +26,6 @@
     "@tanstack/react-router-ssr-query": "latest",
     "@tanstack/react-start": "latest",
     "@tanstack/router-plugin": "^1.132.0",
-    "better-sqlite3": "^12.6.2",
     "chart.js": "^4.5.1",
     "lucide-react": "^0.545.0",
     "nitro": "npm:nitro-nightly@latest",
@@ -43,7 +42,6 @@
     "@tanstack/router-cli": "^1.132.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.0",
-    "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^22.10.2",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
@@ -61,5 +59,9 @@
       "lightningcss",
       "better-sqlite3"
     ]
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true,
+    "esbuild@0.28.1": true
   }
 }

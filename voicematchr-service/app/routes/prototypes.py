@@ -7,6 +7,7 @@ import aiofiles
 import aiofiles.os
 import aiofiles.tempfile
 import aiosqlite
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
@@ -14,6 +15,18 @@ from app.repository.db import get_db
 from app.services import embedder, extractor, kokoro
 
 router = APIRouter()
+
+# Short, neutral utterance used only for the onboarding audition button. It is
+# deliberately NOT kokoro.PROBE_PASSAGE: the probe passage is long enough to give
+# openSMILE and Resemblyzer stable statistics, which is the wrong tradeoff for a
+# preview a learner clicks repeatedly while choosing a target voice.
+PREVIEW_TEXT = "Hello, this is a preview of my voice."
+
+# A prototype is immutable once registered (voice_name and speed never change),
+# so its preview audio is a pure function of prototype_id and is safely cacheable.
+# Without this header every click of the Play button re-synthesizes through Kokoro,
+# costing roughly five seconds of GPU time for a byte-identical result.
+PREVIEW_CACHE_SECONDS = 3600
 
 
 class PrototypeCreate(BaseModel):
@@ -53,8 +66,10 @@ async def create_prototype(
     """
     try:
         wav_bytes = await kokoro.synthesize_wav(body.voice_name, body.speed)
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Kokoro synthesis failed: {exc}")
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502, detail=f"Kokoro synthesis failed: {exc}"
+        ) from exc
 
     tmp_path = None
     try:
@@ -65,8 +80,14 @@ async def create_prototype(
             tmp_path = tmp.name
         embedding = embedder.compute_embedding(tmp_path)
         feats = extractor.extract_features(tmp_path)
+    # Broad on purpose: Resemblyzer and openSMILE are third-party pipelines whose
+    # exception surface is not enumerated in their public contracts. Narrowing here
+    # would let an unlisted exception type escape as a detail-less 500. The `from exc`
+    # clause preserves the original traceback, which the previous bare re-raise dropped.
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Analysis pipeline failed: {exc}")
+        raise HTTPException(
+            status_code=500, detail=f"Analysis pipeline failed: {exc}"
+        ) from exc
     finally:
         if tmp_path is not None:
             await aiofiles.os.remove(tmp_path)
@@ -125,21 +146,41 @@ async def list_prototypes(
 
 @router.get(
     "/{prototype_id}/preview",
+    response_class=Response,
     responses={
-        404: {"description": "Not found."},
+        200: {
+            "content": {"audio/wav": {}},
+            "description": "WAV audition of the prototype voice.",
+        },
+        404: {"description": "Prototype not found."},
+        502: {
+            "description": "Kokoro synthesis service failed to generate the requested voice."
+        },
     },
 )
 async def preview_prototype(
     prototype_id: int,
     db: Annotated[aiosqlite.Connection, Depends(get_db)],
-):
+) -> Response:
+    """Stream a short WAV audition of a registered prototype voice."""
     cursor = await db.execute(
         "SELECT voice_name, speed FROM prototypes WHERE id = ?", (prototype_id,)
     )
     row = await cursor.fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="Prototype not found.")
-    wav_bytes = await kokoro.synthesize_wav(
-        row["voice_name"], row["speed"], text="Hello, this is a preview of my voice."
+
+    try:
+        wav_bytes = await kokoro.synthesize_wav(
+            row["voice_name"], row["speed"], text=PREVIEW_TEXT
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502, detail=f"Kokoro synthesis failed: {exc}"
+        ) from exc
+
+    return Response(
+        content=wav_bytes,
+        media_type="audio/wav",
+        headers={"Cache-Control": f"public, max-age={PREVIEW_CACHE_SECONDS}"},
     )
-    return Response(content=wav_bytes, media_type="audio/wav")

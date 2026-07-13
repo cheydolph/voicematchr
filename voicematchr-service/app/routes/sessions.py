@@ -18,6 +18,20 @@ class SessionCreateResponse(BaseModel):
     session_id: int
 
 
+class RecordingSummary(BaseModel):
+    """One analyzed submission. `cosine_distance` is the longitudinal y-value."""
+
+    recording_id: int
+    cosine_distance: float | None
+    created_at: str
+
+
+class SessionSummary(BaseModel):
+    session_id: int
+    prototype_id: int
+    recordings: list[RecordingSummary]
+
+
 @router.post(
     "/",
     response_model=SessionCreateResponse,
@@ -45,41 +59,58 @@ async def create_session(
     return SessionCreateResponse(session_id=cursor.lastrowid)
 
 
-@router.get(
-    "/{user_id}",
-    responses={
-        403: {"description": "Cannot view another user's sessions."},
-    },
-)
-async def list_sessions(
-    user_id: int,
-    auth_user_id: Annotated[int, Depends(require_auth)],
-    db: Annotated[aiosqlite.Connection, Depends(get_db)],
-):
-    if user_id != auth_user_id:
-        raise HTTPException(
-            status_code=403, detail="Cannot view another user's sessions."
-        )
+async def _recordings_for_session(
+    db: aiosqlite.Connection,
+    session_id: int,
+) -> list[RecordingSummary]:
+    """
+    Return the submissions of one session, oldest first.
 
+    Ordered by `id` rather than `created_at`: the schema stores `created_at` at
+    one-second resolution (datetime('now')), so two submissions inside the same
+    second sort non-deterministically. The autoincrement primary key is strictly
+    monotonic in insertion order, which is the ordering the progress chart needs.
+    """
+    cursor = await db.execute(
+        "SELECT id, cosine_distance, created_at "
+        "FROM recordings WHERE session_id = ? ORDER BY id",
+        (session_id,),
+    )
+    rows = await cursor.fetchall()
+    return [
+        RecordingSummary(
+            recording_id=row["id"],
+            cosine_distance=row["cosine_distance"],
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
+
+
+@router.get("/", response_model=list[SessionSummary])
+async def list_sessions(
+    user_id: Annotated[int, Depends(require_auth)],
+    db: Annotated[aiosqlite.Connection, Depends(get_db)],
+) -> list[SessionSummary]:
+    """
+    Return every session owned by the caller, each with its recording history.
+
+    The caller is derived from the Bearer token, not from a path parameter. The
+    token is already a per-user credential, so a `user_id` in the path could only
+    ever be redundant (equal to the token's user) or forbidden (someone else's) --
+    which is why the previous signature needed a 403 ownership check that this one
+    makes structurally impossible.
+    """
     cursor = await db.execute(
         "SELECT id, prototype_id FROM sessions WHERE user_id = ? ORDER BY id",
         (user_id,),
     )
-    sessions = await cursor.fetchall()
-
-    result = []
-    for session in sessions:
-        cursor = await db.execute(
-            "SELECT id AS recording_id, cosine_distance, created_at "
-            "FROM recordings WHERE session_id = ? ORDER BY created_at",
-            (session["id"],),
+    rows = await cursor.fetchall()
+    return [
+        SessionSummary(
+            session_id=row["id"],
+            prototype_id=row["prototype_id"],
+            recordings=await _recordings_for_session(db, row["id"]),
         )
-        recordings = await cursor.fetchall()
-        result.append(
-            {
-                "session_id": session["id"],
-                "prototype_id": session["prototype_id"],
-                "recordings": [dict(r) for r in recordings],
-            }
-        )
-    return result
+        for row in rows
+    ]
