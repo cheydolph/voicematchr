@@ -56,12 +56,10 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",
-      "lightningcss",
-      "better-sqlite3"
+      "lightningcss"
     ]
   },
   "allowScripts": {
-    "better-sqlite3@12.11.1": true,
     "esbuild@0.28.1": true
   }
 }

@@ -94,7 +94,7 @@ async def analyze(
         learner_embedding = embedder.compute_embedding(dest_path)
         learner_features = extractor.extract_features(dest_path)
     except (FileNotFoundError, ValueError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     cos_distance = scoring.cosine_distance(learner_embedding, prototype_embedding)
     cos_similarity = 1.0 - cos_distance

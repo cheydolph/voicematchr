@@ -1,12 +1,6 @@
 # Stage 1: produce the Nitro server bundle.
 FROM node:22-bookworm-slim AS build
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    make \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /build
 
 # Copy the manifests alone first so the dependency layer is cached across source edits.
@@ -16,7 +10,7 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# Stage 2: run the bundle. Nothing from the build toolchain follows it here.
+# Stage 2: run the bundle
 FROM node:22-bookworm-slim AS runtime
 
 ENV NODE_ENV=production
