@@ -50,6 +50,7 @@ class PrototypeResponse(BaseModel):
     response_model=PrototypeResponse,
     status_code=201,
     responses={
+        409: {"description": "A prototype with this voice and speed already exists."},
         500: {"description": "Analysis pipeline failed for the requested file."},
         502: {
             "description": "Kokoro synthesis service failed to generate the requested voice."
@@ -92,25 +93,34 @@ async def create_prototype(
         if tmp_path is not None:
             await aiofiles.os.remove(tmp_path)
 
-    cursor = await db.execute(
-        """
-        INSERT INTO prototypes
-            (voice_name, speed, embedding, f0_mean, f0_range, hnr,
-             spectral_tilt, loudness)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            body.voice_name,
-            body.speed,
-            json.dumps(embedding),
-            feats["f0_mean"],
-            feats["f0_range"],
-            feats["hnr"],
-            feats["spectral_tilt"],
-            feats["loudness"],
-        ),
-    )
-    await db.commit()
+    try:
+        cursor = await db.execute(
+            """
+            INSERT INTO prototypes
+                (voice_name, speed, embedding, f0_mean, f0_range, hnr,
+                 spectral_tilt, loudness)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                body.voice_name,
+                body.speed,
+                json.dumps(embedding),
+                feats["f0_mean"],
+                feats["f0_range"],
+                feats["hnr"],
+                feats["spectral_tilt"],
+                feats["loudness"],
+            ),
+        )
+        await db.commit()
+    except aiosqlite.IntegrityError as exc:
+        # idx_prototypes_voice_speed: the pair is already registered. Synthesis cost
+        # was already paid by this point, which is acceptable for an admin-side
+        # seeding operation that hits this path at most once per duplicate attempt.
+        raise HTTPException(
+            status_code=409,
+            detail=f"Prototype '{body.voice_name}' at speed {body.speed} already exists.",
+        ) from exc
 
     return PrototypeResponse(
         id=cursor.lastrowid,

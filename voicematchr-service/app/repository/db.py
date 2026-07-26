@@ -1,5 +1,5 @@
 import os
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import aiosqlite
 
@@ -54,12 +54,36 @@ CREATE TABLE IF NOT EXISTS recordings (
 CREATE INDEX IF NOT EXISTS idx_recordings_session ON recordings (session_id);
 """
 
+_PROTOTYPE_DEDUPE = """
+UPDATE sessions
+SET prototype_id = (
+    SELECT MIN(p2.id)
+    FROM prototypes p2
+    JOIN prototypes p1 ON p1.id = sessions.prototype_id
+    WHERE p2.voice_name = p1.voice_name
+      AND p2.speed = p1.speed
+)
+WHERE prototype_id IN (SELECT id FROM prototypes)
+  AND prototype_id NOT IN (
+    SELECT MIN(id) FROM prototypes GROUP BY voice_name, speed
+  );
+
+DELETE FROM prototypes
+WHERE id NOT IN (
+    SELECT MIN(id) FROM prototypes GROUP BY voice_name, speed
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_prototypes_voice_speed
+    ON prototypes (voice_name, speed);
+"""
+
 
 async def init_db() -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("PRAGMA journal_mode=WAL")
         await db.execute("PRAGMA foreign_keys=ON")
         await db.executescript(_SCHEMA)
+        await db.executescript(_PROTOTYPE_DEDUPE)
 
 
 async def get_db() -> AsyncGenerator[aiosqlite.Connection, None]:
