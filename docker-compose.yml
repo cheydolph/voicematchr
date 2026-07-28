@@ -1,3 +1,5 @@
+name: voicematchr
+
 services:
   voicematchr-service:
     build: ./voicematchr-service
@@ -8,24 +10,55 @@ services:
       - DB_PATH=${DB_PATH}
       - RECORDINGS_DIR=${RECORDINGS_DIR}
       - NUMBA_CACHE_DIR=/tmp/numba_cache
+      - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-http://localhost:3000}
     volumes:
       - ./data:/data
-      - ./voicematchr-service/app:/app/app
-      - ./voicematchr-service/tests:/app/tests
-      - ./pytest.ini:/app/pytest.ini:ro
+    networks:
+      - default
+      - kokoro-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3939/health"]
       interval: 10s
       timeout: 5s
       retries: 3
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      - PORT=3000
+      - HOST=0.0.0.0
+      - NODE_ENV=production
+    expose:
+      - "3000"
+    depends_on:
+      voicematchr-service:
+        condition: service_healthy
+    restart: unless-stopped
 
   nginx:
     image: nginx:alpine
     ports:
       - "80:80"
     volumes:
-      - ./frontend/dist:/usr/share/nginx/html:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ~/.cache/torch:/root/.cache/torch:ro
     depends_on:
       - voicematchr-service
+      - frontend
+    restart: unless-stopped
+
+  cloudflared:
+    # Runs the tunnel as a supervised container rather than a systemd service
+    image: cloudflare/cloudflared:latest
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - nginx
+    restart: unless-stopped
+
+networks:
+  default: {}
+  kokoro-net:
+    external: true
