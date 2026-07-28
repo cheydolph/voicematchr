@@ -1,3 +1,5 @@
+name: voicematchr
+
 services:
   voicematchr-service:
     build: ./voicematchr-service
@@ -9,13 +11,11 @@ services:
       - RECORDINGS_DIR=${RECORDINGS_DIR}
       - NUMBA_CACHE_DIR=/tmp/numba_cache
       - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-http://localhost:3000}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - ./data:/data
-      - ./voicematchr-service/app:/app/app
-      - ./voicematchr-service/tests:/app/tests
-      - ./pytest.ini:/app/pytest.ini:ro
+    networks:
+      - default
+      - kokoro-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3939/health"]
       interval: 10s
@@ -27,7 +27,6 @@ services:
     build:
       context: ./frontend
     environment:
-      # Nitro's node-server preset reads PORT and HOST at startup. Both are set explicitly rather than relying on the preset defaults.
       - PORT=3000
       - HOST=0.0.0.0
       - NODE_ENV=production
@@ -48,3 +47,18 @@ services:
       - voicematchr-service
       - frontend
     restart: unless-stopped
+
+  cloudflared:
+    # Runs the tunnel as a supervised container rather than a systemd service
+    image: cloudflare/cloudflared:latest
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - nginx
+    restart: unless-stopped
+
+networks:
+  default: {}
+  kokoro-net:
+    external: true
