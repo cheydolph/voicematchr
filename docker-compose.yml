@@ -65,6 +65,27 @@ services:
       - nginx
     restart: unless-stopped
 
+  seed:
+    # One-shot voicebank seeding. Runs after voicematchr-service is healthy and
+    # talks to it directly over the internal network, bypassing nginx and the
+    # host port entirely. seed_prototypes.py is idempotent (skips or 409s on
+    # already-registered voices), so this is safe to leave running on every
+    # `docker compose up`.
+    image: python:3.11-slim
+    command:
+      [
+        "python3",
+        "/scripts/seed_prototypes.py",
+        "--base-url",
+        "http://voicematchr-service:3939",
+      ]
+    volumes:
+      - ./scripts:/scripts:ro
+    depends_on:
+      voicematchr-service:
+        condition: service_healthy
+    restart: "no"
+
 networks:
   default: {}
   # Shared with the kokoro-tts stack on the same host. Must exist before
