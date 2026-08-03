@@ -39,6 +39,9 @@ services:
 
   nginx:
     image: nginx:alpine
+    # Published for LAN-side diagnostics only; public traffic arrives through
+    # the cloudflared service below, which reaches nginx over the compose
+    # network by name. Nothing is port-forwarded on the router.
     ports:
       - "8080:80"
     volumes:
@@ -48,7 +51,23 @@ services:
       - frontend
     restart: unless-stopped
 
+  cloudflared:
+    # Supervised tunnel connector: the same restart policy as every other
+    # service, so a dropped tunnel restarts instead of silently dying. The
+    # connector dials out to Cloudflare's edge; no inbound port, static IP,
+    # or DDNS entry is required. The public hostname is mapped to nginx:80
+    # in the Cloudflare Zero Trust tunnel configuration.
+    image: cloudflare/cloudflared:latest
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - nginx
+    restart: unless-stopped
+
 networks:
   default: {}
+  # Shared with the kokoro-tts stack on the same host. Must exist before
+  # either stack starts: sudo docker network create kokoro-net
   kokoro-net:
     external: true
