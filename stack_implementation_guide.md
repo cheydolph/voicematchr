@@ -145,12 +145,12 @@ in Phase 0/1. Confirm the service name with
    `docker-compose.yml`.
 2. Deploy. First deploy builds `voicematchr-service` and `frontend` from
    source and takes several minutes.
-3. Confirm all four containers reach a running state and that
-   `voicematchr-service` reports healthy.
-4. Seed the voicebank, then run the smoke test:
+3. Confirm all five containers reach a running state (the `seed` container
+   exits with status 0 once it finishes; that is expected, not a failure),
+   and that `voicematchr-service` reports healthy.
+4. Run the smoke test:
 
 ```bash
-python3 scripts/seed_prototypes.py --base-url http://localhost:8080/api
 python3 scripts/smoke_test.py --base-url http://localhost:8080/api
 ```
 
