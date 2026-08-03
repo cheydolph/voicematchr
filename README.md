@@ -42,7 +42,7 @@ instance (any OpenAI-compatible `/v1/audio/speech` endpoint works).
 cp .env.example .env      # set KOKORO_BASE_URL for your network
 docker compose build
 docker compose up -d
-python3 scripts/seed_prototypes.py   # register the target voicebank
+python3 scripts/seed_prototypes.py --base-url http://localhost:8080/api   # register the target voicebank
 ```
 
 ## Docker Commands
