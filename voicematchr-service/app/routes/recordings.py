@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import uuid
 from pathlib import Path
 from typing import Annotated
@@ -30,6 +31,22 @@ class AnalyzeResponse(BaseModel):
     coaching_text: str
     delta_vector: dict[str, float]
     features: dict[str, float]
+
+
+def _transcode_to_wav(source_bytes: bytes, dest_path: Path) -> None:
+    """
+    Transcode arbitrary browser-recorded audio into real WAV/PCM at dest_path.
+    """
+    result = subprocess.run(
+        ["ffmpeg", "-y", "-i", "pipe:0", "-ar", "16000", "-ac", "1", str(dest_path)],
+        input=source_bytes,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ValueError(
+            f"Could not decode uploaded audio: {result.stderr.decode(errors='replace')}"
+        )
 
 
 def _wav_path(token_hash_prefix: str) -> Path:
@@ -88,7 +105,10 @@ async def analyze(
 
     dest_path = _wav_path(token_hash_prefix)
     contents = await file.read()
-    dest_path.write_bytes(contents)
+    try:
+        _transcode_to_wav(contents, dest_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     try:
         learner_embedding = embedder.compute_embedding(dest_path)
